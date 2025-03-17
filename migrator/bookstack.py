@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, IO
 from urllib.parse import urljoin
 import logging
 
@@ -47,6 +47,11 @@ class Page(BaseModel):
     name: str
     slug: str
 
+class Image(BaseModel):
+    name: str
+    path: str
+    url: str
+
 def remove_none(json: Any) -> Any:
     if not isinstance(json, dict):
         return json
@@ -82,9 +87,15 @@ class Bookstack:
         if not response.ok:
             raise RuntimeError(f"Unable to delete {endpoint}")
 
-    def post(self, endpoint: str, json: Any | None = None) -> Any:
-        LOG.debug(f"POST {endpoint} json={json}")
-        response = self._session.post(urljoin(self._base_url, API_PATH + endpoint), json=remove_none(json))
+    def post(self, endpoint: str, json: Any | None = None, files: Any | None = None) -> Any:
+        LOG.debug(f"POST {endpoint} json={json} files={files}")
+        assert not (json and files), "You can't specifiy JSON and multipart content at the same time"
+        url = urljoin(self._base_url, API_PATH + endpoint)
+        if json:
+            response = self._session.post(url, json=remove_none(json))
+        else:
+            response = self._session.post(url, files=files)
+            LOG.debug(response.request.body)
         return self._rais_error_if_any(response.json())
 
     def put(self, endpoint: str, json: Any | None = None) -> Any:
@@ -139,3 +150,6 @@ class Bookstack:
             "book_id": book_id,
             "chapter_id": chapter_id,
         }))
+
+    def image_gallery_create(self, page_id: int, image: IO, name: str | None = None) -> Image:
+        return Image(**self.post(f"/image-gallery", files={ "uploaded_to": (None, page_id), "type": (None, "gallery"), "image": (name, image), "name": (None, name) }))
