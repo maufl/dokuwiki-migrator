@@ -9,6 +9,11 @@ JSONRPC_PATH = "/lib/exe/jsonrpc.php"
 
 LOG = logging.getLogger(__name__)
 
+
+class DokuWikiBasicAuth(BaseModel):
+    username: str
+    password: str
+
 class RpcError(Exception):
     method: str
     code: int
@@ -69,12 +74,14 @@ class DokuWiki:
     _session: requests.Session
     pretty_urls: bool
 
-    def __init__(self, base_url: str, auth_token: str | None = None, pretty_urls: bool = False) -> None:
+    def __init__(self, base_url: str, auth_token: str | None = None, basic_auth: DokuWikiBasicAuth | None = None, pretty_urls: bool = False) -> None:
         self._base_url = base_url
         self._auth_token = auth_token
         self._session = requests.Session()
         if auth_token:
             self._session.headers.update({ "Authorization": f"Bearer {auth_token}", "Content-Type": "application/json" })
+        if basic_auth:
+            self._session.auth = (basic_auth.username, basic_auth.password)
         self.pretty_urls = pretty_urls
 
     def call(self, rpc_method: str, args: Any | None = None) -> Any:

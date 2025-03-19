@@ -1,2 +1,5 @@
 config.toml
+config.*.toml
+progress.toml
+progress.*.toml
 __pycache__
