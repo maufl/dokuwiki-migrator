@@ -76,6 +76,9 @@ def check(config: TextIO) -> None:
     config = Config(**toml.load(config))
     dokuwiki = DokuWiki(config.dokuwiki.base_url, config.dokuwiki.auth_token, basic_auth = config.dokuwiki.auth_basic)
 
+    me = dokuwiki.who_am_i()
+    print(f"Migrating as user {me}")
+
     for page in dokuwiki.list_pages():
         revisions = dokuwiki.get_page_history(page.id)
         permissions = dokuwiki.acl_check(page.id, user="!!notset!!", groups=["@ALL"])

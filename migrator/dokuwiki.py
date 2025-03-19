@@ -81,6 +81,18 @@ class AclCheckResult(BaseModel):
     result: int
     error: Error
 
+class User(BaseModel):
+    login: str
+    name: str
+    mail: str
+    groups: list[str]
+    isadmin: bool
+    ismanager: bool
+
+class WhoAmIResult(BaseModel):
+    error: Error
+    result: User | None = None
+
 class DokuWiki:
     _base_url: str
     _auth_token: str | None
@@ -91,6 +103,7 @@ class DokuWiki:
         self._base_url = base_url
         self._auth_token = auth_token
         self._session = requests.Session()
+        self._session.headers.update({ "Content-Type": "application/json" })
         if auth_token:
             self._session.headers.update({ "Authorization": f"Bearer {auth_token}", "Content-Type": "application/json" })
         if basic_auth:
@@ -109,6 +122,9 @@ class DokuWiki:
                 raise RpcError(rpc_method, error.code, error.message)
         return resp
 
+    def who_am_i(self) -> User:
+        result = WhoAmIResult(**self.call("/core.whoAmI"))
+        return result.result
 
     def list_pages(self) -> list[PageInfo]:
         args = {
