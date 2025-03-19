@@ -9,11 +9,13 @@ dependencies = [
   "toml",
   "pydantic",
   "requests",
-  "beautifulsoup4"
+  "beautifulsoup4",
+  "httpx>=0.28.1",
 ]
 
 [dependency-groups]
 dev = [
+    "ariadne-codegen>=0.14.0",
     "mypy>=1.15.0",
     "types-requests>=2.32.0.20250306",
     "types-toml>=0.10.8.20240310",
@@ -21,3 +23,9 @@ dev = [
 
 [tool.mypy]
 files = "."
+
+[tool.ariadne-codegen]
+schema_path = "migrator/wikijs/schema.graphql"
+queries_path = "migrator/wikijs/queries.graphql"
+async_client = false
+target_package_path = "migrator/wikijs"

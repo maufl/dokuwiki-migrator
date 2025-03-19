@@ -11,12 +11,9 @@ import requests
 from migrator.dokuwiki import DokuWiki, PageInfo
 from .api import Bookstack, Book, Chapter, Page
 
-LOG = logging.getLogger(__name__)
+from migrator.shared import MEDIA_REGEX, MEDIA_REGEX_PRETTY, PAGE_REGEX, PAGE_REGEX_PRETTY, extract, find_all_tags, download_file, PageAndRevision
 
-MEDIA_REGEX_PRETTY = re.compile('^/_media/(.*)')
-MEDIA_REGEX = re.compile('^/lib/exe/fetch.php?media=(.*)')
-PAGE_REGEX_PRETTY = re.compile('^/(.*)')
-PAGE_REGEX = re.compile('^/doku.php?id=(.*)')
+LOG = logging.getLogger(__name__)
 
 class PagePath(NamedTuple):
     book_slug: str 
@@ -40,10 +37,6 @@ def map_page_id(page_id: str) -> PagePath | None:
         case _:
             raise RuntimeError("Expected to be unreachable")
 
-class PageAndRevision(BaseModel):
-    page_id: str
-    revision: int
-
 class MigratedPage(BaseModel):
     page: Page
     latest_revision: int
@@ -54,34 +47,6 @@ class MigrationProgress(BaseModel):
     pages: dict[str, MigratedPage] = {}
     # map dokuwiki media id to bookstack path
     media: dict[str, str] = {}
-
-def download_file(url: str) -> IO:
-    filename = url.split("/")[-1]
-    tempfile = TemporaryFile()
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        for chunk in r.iter_content(chunk_size=8192):
-            tempfile.write(chunk)
-    tempfile.seek(0)
-    return tempfile
-
-def extract(e: Tag, attr_name: str, regex: Pattern[str]) -> str | None:
-    attr_value = e[attr_name]
-    if not isinstance(attr_value, str):
-        LOG.debug(f"Attribute {attr_name} of {e} is not a str but {attr_value}")
-        return None
-    m = regex.match(attr_value)
-    if not m:
-        LOG.debug(f"Expected regex {regex} to match {attr_value}")
-        return None
-    return m[1]
-
-def find_all_tags(soup: BeautifulSoup, name: str, **kwargs: Any) -> list[Tag]:
-    return [
-        t 
-        for t in soup.find_all(name, **kwargs)
-        if isinstance(t, Tag)
-    ]
 
 class Migrator:
     progress: MigrationProgress

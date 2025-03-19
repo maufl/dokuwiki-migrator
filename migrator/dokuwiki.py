@@ -130,7 +130,7 @@ class DokuWiki:
 
     def who_am_i(self) -> User:
         result = WhoAmIResult(**self.call("/core.whoAmI"))
-        if not result.result:
+        if result.result is None:
             raise RuntimeError("Call to whoAmI returned no data")
         return result.result
 
@@ -140,7 +140,7 @@ class DokuWiki:
             "depth": 0
         }
         result = ListPagesResult(**self.call("/core.listPages", args))
-        if not result.result:
+        if result.result is None:
             raise RuntimeError("Call to listPages returned no data")
         return result.result
 
@@ -152,7 +152,7 @@ class DokuWiki:
             "first": skip
         }
         result = GetPageHistoryResult(**self.call("/core.getPageHistory", args))
-        if not result.result:
+        if result.result is None:
             raise RuntimeError("Call to getPageHistory returned no data")
         return result.result
 

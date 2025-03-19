@@ -1,0 +1,54 @@
+mutation CreatePage(
+    $content: String!
+    $description: String!
+    $isPublished: Boolean!
+    $isPrivate: Boolean!
+    $editor: String!
+    $locale: String!
+    $path: String!
+    $title: String!
+    $tags: [String]!) {
+    pages {
+        create(
+            content: $content, 
+            description: $description,
+            isPublished: $isPublished,
+            isPrivate: $isPrivate,
+            title: $title, 
+            editor: $editor, 
+            path: $path, 
+            locale: $locale,
+            tags: $tags) {
+            responseResult {
+                succeeded
+                errorCode
+                slug
+                message
+            }
+            page {
+                id
+                path
+            }
+        }
+    }
+}
+
+mutation UpdatePage(
+    $id: Int!
+    $content: String!
+    $editor: String!) {
+    pages {
+        update(
+            id: $id
+            content: $content
+            editor: $editor
+        ) {
+            responseResult {
+                succeeded
+                errorCode
+                slug
+                message
+            }
+        }
+    }
+}
