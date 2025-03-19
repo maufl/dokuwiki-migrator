@@ -106,6 +106,7 @@ class DokuWiki:
         self._session.headers.update({ "Content-Type": "application/json" })
         if auth_token:
             self._session.headers.update({ "Authorization": f"Bearer {auth_token}", "Content-Type": "application/json" })
+            self._session.headers.update({ "X-DokuWiki-Token": auth_token })
         if basic_auth:
             self._session.auth = (basic_auth.username, basic_auth.password)
         self.pretty_urls = pretty_urls
