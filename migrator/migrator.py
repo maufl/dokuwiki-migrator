@@ -91,7 +91,7 @@ class Migrator:
             if migrated_page.latest_revision >= page_revision:
                 return LOG.info(f"Skip migration of {page_id} {page_revision}, already migrated")
             html = self.dokuwiki.get_page_html(page_id, page_revision)
-            html = self.upload_and_patch_img_urls(migrated_page.page.id, html)
+            html = self.upload_and_patch_img_urls(html, migrated_page.page.id)
             html = self.patch_page_urls(html)
             self.bookstack.page_update(migrated_page.page.id, html=html)
             self.progress.pages[str(page_path)].latest_revision = page_revision

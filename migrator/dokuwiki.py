@@ -1,10 +1,13 @@
 from typing import Any
 from urllib.parse import urljoin
+import logging
 
 from pydantic import BaseModel
 import requests
 
 JSONRPC_PATH = "/lib/exe/jsonrpc.php"
+
+LOG = logging.getLogger(__name__)
 
 class RpcError(Exception):
     method: str
@@ -62,15 +65,16 @@ class GetPageResult(BaseModel):
 
 class DokuWiki:
     _base_url: str
-    _auth_token: str
+    _auth_token: str | None
     _session: requests.Session
     pretty_urls: bool
 
-    def __init__(self, base_url: str, auth_token: str, pretty_urls: bool = False) -> None:
+    def __init__(self, base_url: str, auth_token: str | None = None, pretty_urls: bool = False) -> None:
         self._base_url = base_url
         self._auth_token = auth_token
         self._session = requests.Session()
-        self._session.headers.update({ "Authorization": f"Bearer {auth_token}", "Content-Type": "application/json" })
+        if auth_token:
+            self._session.headers.update({ "Authorization": f"Bearer {auth_token}", "Content-Type": "application/json" })
         self.pretty_urls = pretty_urls
 
     def call(self, rpc_method: str, args: Any | None = None) -> Any:
@@ -111,4 +115,5 @@ class DokuWiki:
 
     def get_page_html(self, id: str, revision: int = 0) -> str:
         result = GetPageResult(**self.call("/core.getPageHTML", { "page": id, "rev": revision }))
+        LOG.debug(f"Result of getPageHTML for {id} {revision}: {result}")
         return result.result

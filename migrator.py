@@ -33,7 +33,7 @@ class BookstackConfig(BaseModel):
 
 class DokuWikiConfig(BaseModel):
     base_url: str
-    auth_token: str
+    auth_token: str | None = None
     only_ids: list[str] = []
     pretty_urls: bool = False
 
