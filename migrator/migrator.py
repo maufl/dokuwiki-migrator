@@ -67,12 +67,14 @@ class Migrator:
     dokuwiki: DokuWiki
     bookstack: Bookstack
     only_ids: list[str]
+    only_public: bool
 
-    def __init__(self, dokuwiki: DokuWiki, bookstack: Bookstack, progress: MigrationProgress, only_ids: list[str] = []) -> None:
+    def __init__(self, dokuwiki: DokuWiki, bookstack: Bookstack, progress: MigrationProgress, only_ids: list[str] = [], only_public: bool = True) -> None:
         self.dokuwiki = dokuwiki
         self.bookstack = bookstack
         self.progress = progress
         self.only_ids = only_ids
+        self.only_public = only_public
 
     def migrate_page_revision(self, page_id: str, page_revision: int) -> None:
         LOG.info(f"Trying to migrate page {page_id} revision {page_revision}")
@@ -173,6 +175,11 @@ class Migrator:
         for page in all_pages:
             if len(self.only_ids) != 0 and page.id not in self.only_ids:
                 continue
+            if self.only_public:
+                public_permissions = self.dokuwiki.acl_check(page.id, user="!!notset!!", groups=["@ALL"])
+                if public_permissions == 0:
+                    LOG.info(f"Skipping page {page.id} because it's not public")
+                    continue
             page_history_infos = self.dokuwiki.get_page_history(page.id)
             if len(page_history_infos) > 0:
                 all_pages_and_revisions.extend(PageAndRevision(page_id=info.id, revision=info.revision) for info in page_history_infos)

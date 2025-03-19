@@ -45,11 +45,12 @@ class DokuWikiConfig(BaseModel):
 class Config(BaseModel):
     dokuwiki: DokuWikiConfig
     bookstack: BookstackConfig
+    only_public: bool = True
 
 
 @click.command()
 @click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
-@click.option('--progress', '-p', required=False, help="A file which tracks the progress of the migration. Usefull to update a migrated wiki from the original one.", type=click.File(mode='w+',  encoding='utf-8'))
+@click.option('--progress', '-p', required=False, help="A file which tracks the progress of the migration. Usefull to update a migrated wiki from the original one.", type=click.File(mode='r+',  encoding='utf-8'))
 def migrate(config: TextIO, progress: TextIO | None = None) -> None:
     config = Config(**toml.load(config))
     dokuwiki = DokuWiki(config.dokuwiki.base_url, config.dokuwiki.auth_token, basic_auth = config.dokuwiki.auth_basic, pretty_urls = config.dokuwiki.pretty_urls)
@@ -59,7 +60,8 @@ def migrate(config: TextIO, progress: TextIO | None = None) -> None:
         dokuwiki=dokuwiki,
         bookstack=bookstack,
         progress=migration_progress,
-        only_ids=config.dokuwiki.only_ids
+        only_ids=config.dokuwiki.only_ids,
+        only_public=config.only_public
     )
     try:
         migrator.migrate()
@@ -75,9 +77,9 @@ def check(config: TextIO) -> None:
     dokuwiki = DokuWiki(config.dokuwiki.base_url, config.dokuwiki.auth_token, basic_auth = config.dokuwiki.auth_basic)
 
     for page in dokuwiki.list_pages():
-        print(f"Page {page.id}, latest revision {page.revision}")
         revisions = dokuwiki.get_page_history(page.id)
-        print(f"Revisions {revisions}")
+        permissions = dokuwiki.acl_check(page.id, user="!!notset!!", groups=["@ALL"])
+        print(f"Page {page.id}, latest revision {page.revision}, total revisions {len(revisions)}, public permissions {permissions}")
 
 
 @click.command()

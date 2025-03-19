@@ -1,6 +1,7 @@
 from typing import Any
 from urllib.parse import urljoin
 import logging
+from enum import IntEnum
 
 from pydantic import BaseModel
 import requests
@@ -13,6 +14,14 @@ LOG = logging.getLogger(__name__)
 class DokuWikiBasicAuth(BaseModel):
     username: str
     password: str
+
+class Permission(IntEnum):
+    NONE = 0
+    READ = 1
+    EDIT = 2
+    CREATE = 4
+    UPLOAD = 8
+    DELETE = 16
 
 class RpcError(Exception):
     method: str
@@ -66,6 +75,10 @@ class GetPageHtmlResult(BaseModel):
 
 class GetPageResult(BaseModel):
     result: str
+    error: Error
+
+class AclCheckResult(BaseModel):
+    result: int
     error: Error
 
 class DokuWiki:
@@ -123,4 +136,8 @@ class DokuWiki:
     def get_page_html(self, id: str, revision: int = 0) -> str:
         result = GetPageResult(**self.call("/core.getPageHTML", { "page": id, "rev": revision }))
         LOG.debug(f"Result of getPageHTML for {id} {revision}: {result}")
+        return result.result
+
+    def acl_check(self, page_id: str, user: str = "", groups: list[str] = []) -> int:
+        result = AclCheckResult(**self.call("/core.aclCheck", { "page": page_id, "user": user, "groups": groups }))
         return result.result
