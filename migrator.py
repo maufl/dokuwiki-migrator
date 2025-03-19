@@ -34,6 +34,7 @@ class BookstackConfig(BaseModel):
 class DokuWikiConfig(BaseModel):
     base_url: str
     auth_token: str
+    only_ids: list[str] = []
 
 class Config(BaseModel):
     dokuwiki: DokuWikiConfig
@@ -42,16 +43,24 @@ class Config(BaseModel):
 
 @click.command()
 @click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
-def migrate(config: TextIO) -> None:
+@click.option('--progress', '-p', required=False, help="A file which tracks the progress of the migration. Usefull to update a migrated wiki from the original one.", type=click.File(mode='r+',  encoding='utf-8'))
+def migrate(config: TextIO, progress: TextIO | None = None) -> None:
     config = Config(**toml.load(config))
     dokuwiki = DokuWiki(config.dokuwiki.base_url, config.dokuwiki.auth_token)
     bookstack = Bookstack(config.bookstack.base_url, config.bookstack.token.id, config.bookstack.token.secret)
+    migration_progress = MigrationProgress(**toml.load(progress)) if progress else MigrationProgress()
     migrator = Migrator(
         dokuwiki=dokuwiki,
         bookstack=bookstack,
-        progress=MigrationProgress()
+        progress=migration_progress,
+        only_ids=config.dokuwiki.only_ids
     )
-    migrator.migrate()
+    try:
+        migrator.migrate()
+    finally:
+        if progress:
+            progress.seek(0)
+            toml.dump(migration_progress.model_dump(), progress)
 
 @click.command()
 @click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))

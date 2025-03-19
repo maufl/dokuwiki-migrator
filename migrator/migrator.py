@@ -20,10 +20,11 @@ class PagePath(NamedTuple):
     chapter_slug: str | None
     page_slug: str
 
-
-class ChapterPath(NamedTuple):
-    book_slug: str 
-    chapter_slug: str
+    def __str__(self) -> str:
+        s = self.book_slug + '/'
+        if self.chapter_slug:
+            s += self.chapter_slug + '/'
+        return s + self.page_slug
 
 def map_page_id(page_id: str) -> PagePath | None:
     match page_id.split(":"):
@@ -44,8 +45,8 @@ class MigratedPage(BaseModel):
 
 class MigrationProgress(BaseModel):
     books: dict[str, Book] = {}
-    chapters: dict[ChapterPath, Chapter] = {}
-    pages: dict[PagePath, MigratedPage] = {}
+    chapters: dict[str, Chapter] = {}
+    pages: dict[str, MigratedPage] = {}
     # map dokuwiki media id to bookstack path
     media: dict[str, str] = {}
 
@@ -63,11 +64,13 @@ class Migrator:
     progress: MigrationProgress
     dokuwiki: DokuWiki
     bookstack: Bookstack
+    only_ids: list[str]
 
-    def __init__(self, dokuwiki: DokuWiki, bookstack: Bookstack, progress: MigrationProgress) -> None:
+    def __init__(self, dokuwiki: DokuWiki, bookstack: Bookstack, progress: MigrationProgress, only_ids: list[str] = []) -> None:
         self.dokuwiki = dokuwiki
         self.bookstack = bookstack
         self.progress = progress
+        self.only_ids = only_ids
 
     def migrate_page_revision(self, page_id: str, page_revision: int) -> None:
         LOG.info(f"Trying to migrate page {page_id} revision {page_revision}")
@@ -80,16 +83,16 @@ class Migrator:
         chapter = self.get_chapter_or_migrate(book_slug, book.id, chapter_slug) if chapter_slug else None
 
         # check if we migrated this page before
-        migrated_page = self.progress.pages.get(page_path)
+        migrated_page = self.progress.pages.get(str(page_path))
         if migrated_page:
             # if we already migrated this page, assert that we try to create a newer revision
-            assert migrated_page.latest_revision < page_revision
-            # TODO
+            if migrated_page.latest_revision >= page_revision:
+                return LOG.info(f"Skip migration of {page_id} {page_revision}, already migrated")
             html = self.dokuwiki.get_page_html(page_id, page_revision)
             html = self.upload_and_patch_img_urls(migrated_page.page.id, html)
             html = self.patch_page_urls(html)
             self.bookstack.page_update(migrated_page.page.id, html=html)
-            self.progress.pages[page_path].latest_revision = page_revision
+            self.progress.pages[str(page_path)].latest_revision = page_revision
         else:
             page_history_infos = self.dokuwiki.get_page_history(page_id)
             revisions = sorted(info.revision for info in page_history_infos)
@@ -102,7 +105,7 @@ class Migrator:
             html = self.upload_and_patch_img_urls(bookstack_page.id, html)
             self.bookstack.page_update(bookstack_page.id, html=html)
             migrated_page = MigratedPage(page=bookstack_page, latest_revision=page_revision)
-            self.progress.pages[page_path] = migrated_page
+            self.progress.pages[str(page_path)] = migrated_page
 
     def patch_img_urls(self, html: str) -> str:
         soup = BeautifulSoup(html, 'html.parser')
@@ -163,7 +166,7 @@ class Migrator:
 
 
     def get_chapter_or_migrate(self, book_slug: str, book_id: int, chapter_slug: str) -> Chapter:
-        key = ChapterPath(book_slug, chapter_slug)
+        key = f"{book_slug}/{chapter_slug}"
         if key in self.progress.chapters:
             return self.progress.chapters[key]
 
@@ -175,6 +178,8 @@ class Migrator:
         all_pages_and_revisions = []
         all_pages = self.dokuwiki.list_pages()
         for page in all_pages:
+            if len(self.only_ids) != 0 and page.id not in self.only_ids:
+                continue
             page_history_infos = self.dokuwiki.get_page_history(page.id)
             if len(page_history_infos) > 0:
                 all_pages_and_revisions.extend(PageAndRevision(page_id=info.id, revision=info.revision) for info in page_history_infos)
