@@ -35,8 +35,10 @@ def map_page_id(page_id: str) -> PagePath | None:
             return PagePath(book_slug, chapter_slug, "-".join(page_slug, *rest))
         case [book_slug, page_slug]:
             return PagePath(book_slug, None, page_slug)
+        case [page_slug]:
+            return PagePath(page_slug, None, page_slug)
         case _:
-            return None
+            raise RuntimeError("Expected to be unreachable")
 
 class PageAndRevision(BaseModel):
     page_id: str
