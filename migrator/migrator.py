@@ -12,8 +12,10 @@ from .bookstack import Bookstack, Book, Chapter, Page
 
 LOG = logging.getLogger(__name__)
 
-MEDIA_REGEX = re.compile('^/_media/')
-PAGE_REGEX = re.compile('^/')
+MEDIA_REGEX_PRETTY = re.compile('^/_media/(.*)')
+MEDIA_REGEX = re.compile('^/lib/exe/fetch.php?media=(.*)')
+PAGE_REGEX_PRETTY = re.compile('^/(.*)')
+PAGE_REGEX = re.compile('^/doku.php?id=(.*)')
 
 class PagePath(NamedTuple):
     book_slug: str 
@@ -99,25 +101,13 @@ class Migrator:
             # if we only have one revision, then we must pass 0 as revision to dokuwiki, otherwise it returns an error
             html = self.dokuwiki.get_page_html(page_id, page_revision if len(revisions) > 0 else 0)
             # update image URLs for images we already uploaded to bookstack
-            html = self.patch_img_urls(html)
+            html = self.upload_and_patch_img_urls(html)
             html = self.patch_page_urls(html)
             bookstack_page = self.bookstack.page_create(name=page_slug.title(), html=html, book_id=book.id, chapter_id=chapter.id if chapter else None)
-            html = self.upload_and_patch_img_urls(bookstack_page.id, html)
+            html = self.upload_and_patch_img_urls(html, bookstack_page.id)
             self.bookstack.page_update(bookstack_page.id, html=html)
             migrated_page = MigratedPage(page=bookstack_page, latest_revision=page_revision)
             self.progress.pages[str(page_path)] = migrated_page
-
-    def patch_img_urls(self, html: str) -> str:
-        soup = BeautifulSoup(html, 'html.parser')
-        images_to_fix = soup.find_all('img', src=MEDIA_REGEX)
-        if len(images_to_fix) == 0:
-            return html
-        for img in images_to_fix:
-            image_name = img['src'].split('/')[-1]
-            bookstack_path = self.progress.media.get(image_name)
-            if bookstack_path:
-                img['src'] = bookstack_path
-        return str(soup)
 
     def bookstack_url_from_dokuwiki_id(self, page_id: str) -> str | None:
         page_path = map_page_id(page_id)
@@ -132,28 +122,31 @@ class Migrator:
 
     def patch_page_urls(self, html: str) -> str:
         soup = BeautifulSoup(html, 'html.parser')
-        links_to_fix = soup.find_all('a', href=PAGE_REGEX)
+        regex = PAGE_REGEX_PRETTY if self.dokuwiki.pretty_urls else PAGE_REGEX
+        links_to_fix = soup.find_all('a', href=regex)
         if len(links_to_fix) == 0:
             return html
         for a in links_to_fix:
-            page_id = a['href'].lstrip("/")
+            page_id = regex.match(a['href'])[1]
             a['href'] = self.bookstack_url_from_dokuwiki_id(page_id) or a['href']
         return str(soup)
     
-    def upload_and_patch_img_urls(self, page_id: int, html: str) -> str:
+    def upload_and_patch_img_urls(self, html: str, page_id: int | None = None) -> str:
         soup = BeautifulSoup(html, 'html.parser')
-        images_to_fix = soup.find_all('img', src=MEDIA_REGEX)
+        regex = MEDIA_REGEX_PRETTY if self.dokuwiki.pretty_urls else MEDIA_REGEX
+        images_to_fix = soup.find_all('img', src=regex)
         if len(images_to_fix) == 0:
             return html
         for img in images_to_fix:
-            image_name = img['src'].split('/')[-1].split("?")[0]
+            image_name = regex.match(img['src'])[1].split("?")[0]
             if bookstack_path := self.progress.media.get(image_name):
                 img['src'] = bookstack_path
                 continue
-            img_file = download_file(self.dokuwiki._base_url + img['src'])
-            bookstack_image = self.bookstack.image_gallery_create(page_id, img_file, image_name.split(":")[-1])
-            self.progress.media[image_name] = bookstack_image.path
-            img['src'] = bookstack_image.path
+            if page_id:
+                img_file = download_file(self.dokuwiki._base_url + img['src'])
+                bookstack_image = self.bookstack.image_gallery_create(page_id, img_file, image_name.split(":")[-1])
+                self.progress.media[image_name] = bookstack_image.path
+                img['src'] = bookstack_image.path
         return str(soup)
 
     def get_book_or_migrate(self, book_slug: str) -> Book:

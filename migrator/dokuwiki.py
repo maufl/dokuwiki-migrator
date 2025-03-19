@@ -64,12 +64,14 @@ class DokuWiki:
     _base_url: str
     _auth_token: str
     _session: requests.Session
+    pretty_urls: bool
 
-    def __init__(self, base_url: str, auth_token: str) -> None:
+    def __init__(self, base_url: str, auth_token: str, pretty_urls: bool = False) -> None:
         self._base_url = base_url
         self._auth_token = auth_token
         self._session = requests.Session()
         self._session.headers.update({ "Authorization": f"Bearer {auth_token}", "Content-Type": "application/json" })
+        self.pretty_urls = pretty_urls
 
     def call(self, rpc_method: str, args: Any | None = None) -> Any:
         url = urljoin(self._base_url, JSONRPC_PATH + rpc_method)
