@@ -1,10 +1,11 @@
-from typing import TextIO, NamedTuple
+from typing import TextIO, NamedTuple, IO, Iterable, Any
 import logging
 from tempfile import TemporaryFile
 import re
+from re import Pattern
 
 from pydantic import BaseModel
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, PageElement, Tag, NavigableString
 import requests
 
 from .dokuwiki import DokuWiki, PageInfo
@@ -52,7 +53,7 @@ class MigrationProgress(BaseModel):
     # map dokuwiki media id to bookstack path
     media: dict[str, str] = {}
 
-def download_file(url: str) -> TemporaryFile:
+def download_file(url: str) -> IO:
     filename = url.split("/")[-1]
     tempfile = TemporaryFile()
     with requests.get(url, stream=True) as r:
@@ -61,6 +62,24 @@ def download_file(url: str) -> TemporaryFile:
             tempfile.write(chunk)
     tempfile.seek(0)
     return tempfile
+
+def extract(e: Tag, attr_name: str, regex: Pattern[str]) -> str | None:
+    attr_value = e[attr_name]
+    if not isinstance(attr_value, str):
+        LOG.debug(f"Attribute {attr_name} of {e} is not a str but {attr_value}")
+        return None
+    m = regex.match(attr_value)
+    if not m:
+        LOG.debug(f"Expected regex {regex} to match {attr_value}")
+        return None
+    return m[1]
+
+def find_all_tags(soup: BeautifulSoup, name: str, **kwargs: Any) -> list[Tag]:
+    return [
+        t 
+        for t in soup.find_all(name, **kwargs)
+        if isinstance(t, Tag)
+    ]
 
 class Migrator:
     progress: MigrationProgress
@@ -117,7 +136,7 @@ class Migrator:
             return None
         book_id, chapter_id, page_slug = page_path
         book = self.progress.books.get(book_id)
-        migrate_page = self.progress.pages.get(page_path)
+        migrate_page = self.progress.pages.get(str(page_path))
         if book is None or migrate_page is None:
             return None
         return  f"/books/{book.slug}/page/{migrate_page.page.slug}"
@@ -125,27 +144,34 @@ class Migrator:
     def patch_page_urls(self, html: str) -> str:
         soup = BeautifulSoup(html, 'html.parser')
         regex = PAGE_REGEX_PRETTY if self.dokuwiki.pretty_urls else PAGE_REGEX
-        links_to_fix = soup.find_all('a', href=regex)
+        links_to_fix = find_all_tags(soup, 'a', href=regex)
         if len(links_to_fix) == 0:
             return html
-        for a in links_to_fix:
-            page_id = regex.match(a['href'])[1]
+        for a in links_to_fix:  
+            page_id = extract(a, 'href', regex)
+            if page_id is None:
+                LOG.warning(f"Unable to fix link {a}, can't find page id")
+                continue
             a['href'] = self.bookstack_url_from_dokuwiki_id(page_id) or a['href']
         return str(soup)
     
     def upload_and_patch_img_urls(self, html: str, page_id: int | None = None) -> str:
         soup = BeautifulSoup(html, 'html.parser')
         regex = MEDIA_REGEX_PRETTY if self.dokuwiki.pretty_urls else MEDIA_REGEX
-        images_to_fix = soup.find_all('img', src=regex)
+        images_to_fix = find_all_tags(soup, 'img', src=regex)
         if len(images_to_fix) == 0:
             return html
         for img in images_to_fix:
-            image_name = regex.match(img['src'])[1].split("?")[0]
+            image_name = extract(img, 'src', regex)
+            if image_name is None:
+                LOG.warning("Unable to fix image {img}, can't find media id")
+                continue
+            image_name = image_name.split("?")[0]   
             if bookstack_path := self.progress.media.get(image_name):
                 img['src'] = bookstack_path
                 continue
             if page_id:
-                img_file = download_file(self.dokuwiki._base_url + img['src'])
+                img_file = download_file(self.dokuwiki._base_url + str(img['src']))
                 bookstack_image = self.bookstack.image_gallery_create(page_id, img_file, image_name.split(":")[-1])
                 self.progress.media[image_name] = bookstack_image.path
                 img['src'] = bookstack_image.path
@@ -170,7 +196,7 @@ class Migrator:
         return chapter
 
     def migrate(self) -> None:
-        all_pages_and_revisions = []
+        all_pages_and_revisions: list[PageAndRevision] = []
         all_pages = self.dokuwiki.list_pages()
         for page in all_pages:
             if len(self.only_ids) != 0 and page.id not in self.only_ids:
@@ -187,5 +213,5 @@ class Migrator:
                 all_pages_and_revisions.append(PageAndRevision(page_id=page.id, revision=page.revision))
 
         all_pages_and_revisions.sort(key=lambda p: p.revision)
-        for page in all_pages_and_revisions:
-            self.migrate_page_revision(page_id = page.page_id, page_revision = page.revision)
+        for page_and_revision in all_pages_and_revisions:
+            self.migrate_page_revision(page_id = page_and_revision.page_id, page_revision = page_and_revision.revision)

@@ -17,7 +17,7 @@ from pydantic import BaseModel
 import click
 import toml
 
-from migrator.dokuwiki import DokuWiki, PageInfo
+from migrator.dokuwiki import DokuWiki, PageInfo, DokuWikiBasicAuth
 from migrator.bookstack import Bookstack
 from migrator.migrator import Migrator, MigrationProgress
 
@@ -30,10 +30,6 @@ class BookstackToken(BaseModel):
 class BookstackConfig(BaseModel):
     base_url: str
     token: BookstackToken
-
-class DokuWikiBasicAuth(BaseModel):
-    username: str
-    password: str
 
 class DokuWikiConfig(BaseModel):
     base_url: str
@@ -52,16 +48,16 @@ class Config(BaseModel):
 @click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
 @click.option('--progress', '-p', required=False, help="A file which tracks the progress of the migration. Usefull to update a migrated wiki from the original one.", type=click.File(mode='r+',  encoding='utf-8'))
 def migrate(config: TextIO, progress: TextIO | None = None) -> None:
-    config = Config(**toml.load(config))
-    dokuwiki = DokuWiki(config.dokuwiki.base_url, config.dokuwiki.auth_token, basic_auth = config.dokuwiki.auth_basic, pretty_urls = config.dokuwiki.pretty_urls)
-    bookstack = Bookstack(config.bookstack.base_url, config.bookstack.token.id, config.bookstack.token.secret)
+    cfg = Config(**toml.load(config))
+    dokuwiki = DokuWiki(cfg.dokuwiki.base_url, cfg.dokuwiki.auth_token, basic_auth = cfg.dokuwiki.auth_basic, pretty_urls = cfg.dokuwiki.pretty_urls)
+    bookstack = Bookstack(cfg.bookstack.base_url, cfg.bookstack.token.id, cfg.bookstack.token.secret)
     migration_progress = MigrationProgress(**toml.load(progress)) if progress else MigrationProgress()
     migrator = Migrator(
         dokuwiki=dokuwiki,
         bookstack=bookstack,
         progress=migration_progress,
-        only_ids=config.dokuwiki.only_ids,
-        only_public=config.only_public
+        only_ids=cfg.dokuwiki.only_ids,
+        only_public=cfg.only_public
     )
     try:
         migrator.migrate()
@@ -73,8 +69,8 @@ def migrate(config: TextIO, progress: TextIO | None = None) -> None:
 @click.command()
 @click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
 def check(config: TextIO) -> None:
-    config = Config(**toml.load(config))
-    dokuwiki = DokuWiki(config.dokuwiki.base_url, config.dokuwiki.auth_token, basic_auth = config.dokuwiki.auth_basic)
+    cfg = Config(**toml.load(config))
+    dokuwiki = DokuWiki(cfg.dokuwiki.base_url, cfg.dokuwiki.auth_token, basic_auth = cfg.dokuwiki.auth_basic)
 
     me = dokuwiki.who_am_i()
     print(f"Migrating as user {me}")
@@ -88,8 +84,8 @@ def check(config: TextIO) -> None:
 @click.command()
 @click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
 def reset(config: TextIO) -> None:
-    config = Config(**toml.load(config))
-    bookstack = Bookstack(config.bookstack.base_url, config.bookstack.token.id, config.bookstack.token.secret)
+    cfg = Config(**toml.load(config))
+    bookstack = Bookstack(cfg.bookstack.base_url, cfg.bookstack.token.id, cfg.bookstack.token.secret)
 
     for book in bookstack.books_list():
         bookstack.book_delete(book.id)

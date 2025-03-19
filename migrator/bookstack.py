@@ -132,7 +132,7 @@ class Bookstack:
 
 
     def page_create(self, name: str, html: str | None = None, markdown: str | None = None, book_id: int | None = None, chapter_id: int | None = None) -> Page:
-        assert html or markdown_str, "Either HTML or Markdown content is required"
+        assert html or markdown, "Either HTML or Markdown content is required"
         assert book_id or chapter_id, "Either a book id or a chapter id is required"
         return Page(**self.post(f"/pages", json={
             "name": name,

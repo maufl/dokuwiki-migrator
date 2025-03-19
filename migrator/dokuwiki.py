@@ -116,15 +116,17 @@ class DokuWiki:
         resp = self._session.post(url, json=args)
         if not resp.ok:
             raise Exception(f"Call {rpc_method} did not succeed: {resp.status_code} {resp.text}")
-        resp = resp.json()
-        if "error" in resp:
-            error = Error(**resp["error"])
+        json_resp = resp.json()
+        if "error" in json_resp:
+            error = Error(**json_resp["error"])
             if not error.no_error:
                 raise RpcError(rpc_method, error.code, error.message)
-        return resp
+        return json_resp
 
     def who_am_i(self) -> User:
         result = WhoAmIResult(**self.call("/core.whoAmI"))
+        if not result.result:
+            raise RuntimeError("Call to whoAmI returned no data")
         return result.result
 
     def list_pages(self) -> list[PageInfo]:
@@ -133,6 +135,8 @@ class DokuWiki:
             "depth": 0
         }
         result = ListPagesResult(**self.call("/core.listPages", args))
+        if not result.result:
+            raise RuntimeError("Call to listPages returned no data")
         return result.result
 
 
@@ -143,6 +147,8 @@ class DokuWiki:
             "first": skip
         }
         result = GetPageHistoryResult(**self.call("/core.getPageHistory", args))
+        if not result.result:
+            raise RuntimeError("Call to getPageHistory returned no data")
         return result.result
 
     def get_page(self, id: str, revision: int = 0) -> str:
