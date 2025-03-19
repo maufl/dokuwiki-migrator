@@ -9,6 +9,14 @@ API_PATH = "/api"
 
 LOG = logging.getLogger(__name__)
 
+class BookstackToken(BaseModel):
+    id: str
+    secret: str
+
+class BookstackConfig(BaseModel):
+    base_url: str
+    token: BookstackToken
+
 class BookstackError(Exception):
     code: int
     message: str
@@ -65,10 +73,10 @@ class Bookstack:
     _base_url: str
     _session: requests.Session
 
-    def __init__(self, base_url: str, token_id: str, token_secret: str) -> None:
-        self._base_url = base_url
+    def __init__(self, config: BookstackConfig) -> None:
+        self._base_url = config.base_url
         self._session = requests.Session()
-        self._session.headers.update({ "Authorization": f"Token {token_id}:{token_secret}" })
+        self._session.headers.update({ "Authorization": f"Token {config.token.id}:{config.token.secret}" })
 
     def _rais_error_if_any(self, json: Any) -> Any:
         if "error" in json:

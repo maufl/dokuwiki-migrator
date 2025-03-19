@@ -15,6 +15,13 @@ class DokuWikiBasicAuth(BaseModel):
     username: str
     password: str
 
+class DokuWikiConfig(BaseModel):
+    base_url: str
+    auth_token: str | None = None
+    auth_basic: DokuWikiBasicAuth | None = None
+    only_ids: list[str] = []
+    pretty_urls: bool = False
+
 class Permission(IntEnum):
     NONE = 0
     READ = 1
@@ -95,21 +102,19 @@ class WhoAmIResult(BaseModel):
 
 class DokuWiki:
     _base_url: str
-    _auth_token: str | None
     _session: requests.Session
     pretty_urls: bool
 
-    def __init__(self, base_url: str, auth_token: str | None = None, basic_auth: DokuWikiBasicAuth | None = None, pretty_urls: bool = False) -> None:
-        self._base_url = base_url
-        self._auth_token = auth_token
+    def __init__(self, config: DokuWikiConfig) -> None:
+        self._base_url = config.base_url
         self._session = requests.Session()
         self._session.headers.update({ "Content-Type": "application/json" })
-        if auth_token:
-            self._session.headers.update({ "Authorization": f"Bearer {auth_token}", "Content-Type": "application/json" })
-            self._session.headers.update({ "X-DokuWiki-Token": auth_token })
-        if basic_auth:
-            self._session.auth = (basic_auth.username, basic_auth.password)
-        self.pretty_urls = pretty_urls
+        if config.auth_token:
+            self._session.headers.update({ "Authorization": f"Bearer {config.auth_token}", "Content-Type": "application/json" })
+            self._session.headers.update({ "X-DokuWiki-Token": config.auth_token })
+        if config.auth_basic:
+            self._session.auth = (config.auth_basic.username, config.auth_basic.password)
+        self.pretty_urls = config.pretty_urls
 
     def call(self, rpc_method: str, args: Any | None = None) -> Any:
         url = urljoin(self._base_url, JSONRPC_PATH + rpc_method)

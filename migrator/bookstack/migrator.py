@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from bs4 import BeautifulSoup, PageElement, Tag, NavigableString
 import requests
 
-from .dokuwiki import DokuWiki, PageInfo
-from .bookstack import Bookstack, Book, Chapter, Page
+from migrator.dokuwiki import DokuWiki, PageInfo
+from .api import Bookstack, Book, Chapter, Page
 
 LOG = logging.getLogger(__name__)
 
