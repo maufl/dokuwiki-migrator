@@ -9,6 +9,7 @@ import requests
 JSONRPC_PATH = "/lib/exe/jsonrpc.php"
 
 LOG = logging.getLogger(__name__)
+#LOG.setLevel(logging.DEBUG)
 
 
 class DokuWikiBasicAuth(BaseModel):
@@ -68,7 +69,7 @@ class PageHistoryInfo(BaseModel):
     author: str
     summary: str
     type: str
-    sizechange: int
+    sizechange: int | None
 
 class GetPageHistoryResult(BaseModel):
     result: list[PageHistoryInfo] | None = None
@@ -119,6 +120,7 @@ class DokuWiki:
     def call(self, rpc_method: str, args: Any | None = None) -> Any:
         url = urljoin(self._base_url, JSONRPC_PATH + rpc_method)
         resp = self._session.post(url, json=args)
+        LOG.debug(f"Call {rpc_method} returned {resp.text}")
         if not resp.ok:
             raise Exception(f"Call {rpc_method} did not succeed: {resp.status_code} {resp.text}")
         json_resp = resp.json()

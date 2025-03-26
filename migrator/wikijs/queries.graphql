@@ -1,3 +1,10 @@
+fragment FullResponseResult on ResponseStatus {
+    succeeded
+    errorCode
+    slug
+    message
+}
+
 mutation CreatePage(
     $content: String!
     $description: String!
@@ -36,18 +43,63 @@ mutation CreatePage(
 mutation UpdatePage(
     $id: Int!
     $content: String!
-    $editor: String!) {
+    $editor: String!
+    $tags: [String!]!) {
     pages {
         update(
             id: $id
             content: $content
             editor: $editor
+            tags: $tags
         ) {
             responseResult {
                 succeeded
                 errorCode
                 slug
                 message
+            }
+        }
+    }
+}
+
+mutation CreateFolder($parentFolderId: Int!, $slug: String!, $name: String) {
+    assets {
+        createFolder(parentFolderId: $parentFolderId, slug: $slug, name: $name) {
+            responseResult {
+                succeeded
+                errorCode
+                slug
+                message
+            }
+        }
+    }
+}
+
+query ListFolders($parentFolderId: Int!) {
+    assets {
+        folders(parentFolderId: $parentFolderId) {
+            id
+            slug
+            name
+        }
+    }
+}
+
+query ListPages {
+    pages {
+        list {
+            id
+            path
+            locale
+        }
+    }
+}
+
+mutation DeletePage($pageId: Int!) {
+    pages {
+        delete(id: $pageId) {
+            responseResult {
+                ... FullResponseResult
             }
         }
     }

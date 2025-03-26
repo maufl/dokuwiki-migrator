@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, IO
 import logging 
 
 from pydantic import BaseModel
@@ -16,6 +16,8 @@ class MigratedPage(BaseModel):
 
 class MigrationProgress(BaseModel):
     pages: dict[str, MigratedPage] = {}
+    folders: dict[str, int] = {}
+    media: dict[str, str] = {}
 
 def page_id_to_path(page_id: str) -> str:
     return page_id.replace(":", "/")
@@ -36,6 +38,14 @@ class Migrator:
         self.progress = progress
         self.only_ids = only_ids
         self.only_public = only_public
+        self._scan_folders()
+
+    def _scan_folders(self, parent_folder_id: int = 0, parent_folder_path: str = "") -> None:
+        folders = self.wikijs.list_folders(parent_folder_id)
+        for folder in folders:
+            path = (parent_folder_path + "/" + folder.slug).strip("/")
+            self.progress.folders[path] = folder.id
+            self._scan_folders(folder.id, path)
 
     def migrate_page_revision(self, page: PageAndRevision) -> None:
         page_id = page.page_id
@@ -47,7 +57,7 @@ class Migrator:
             if migrated_page.latest_revision >= page_revision:
                 return LOG.info(f"Skip migration of {page_id} {page_revision}, already migrated")
             html = self.dokuwiki.get_page_html(page_id, page_revision)
-            html = self.upload_and_patch_img_urls(html, migrated_page.page_id) or html
+            html = self.upload_and_patch_img_urls(html, page_id) or html
             html = self.patch_page_urls(html) or html
             self.wikijs.update_page(
                 id=migrated_page.page_id,
@@ -60,7 +70,7 @@ class Migrator:
             # if we only have one revision, then we must pass 0 as revision to dokuwiki, otherwise it returns an error
             html = self.dokuwiki.get_page_html(page_id, page_revision if len(revisions) > 0 else 0)
             # update image URLs for images we already uploaded to bookstack
-            html = self.upload_and_patch_img_urls(html) or html
+            html = self.upload_and_patch_img_urls(html, page_id) or html
             html = self.patch_page_urls(html) or html
             wikijs_page = self.wikijs.create_page(
                 path=page_id_to_path(page_id),
@@ -69,15 +79,7 @@ class Migrator:
                 editor="ckeditor",
                 locale="de",
             )
-            LOG.info(f"Page creation result {wikijs_page}")
-            wikijs_page_id = wikijs_page.id
-            fixed_html = self.upload_and_patch_img_urls(html)
-            if fixed_html is not None:
-                self.wikijs.update_page(
-                    id=wikijs_page_id,
-                    content=fixed_html,
-                )
-            migrated_page = MigratedPage(page_id=wikijs_page_id, latest_revision=page_revision)
+            migrated_page = MigratedPage(page_id=wikijs_page.id, latest_revision=page_revision)
             self.progress.pages[page_id] = migrated_page
         
 
@@ -95,7 +97,7 @@ class Migrator:
             a['href'] = page_id_to_path(page_id)
         return str(soup)
     
-    def upload_and_patch_img_urls(self, html: str, page_id: int | None = None) -> str | None:
+    def upload_and_patch_img_urls(self, html: str, dokuwiki_page_id: str) -> str | None:
         soup = BeautifulSoup(html, 'html.parser')
         regex = MEDIA_REGEX_PRETTY if self.dokuwiki.pretty_urls else MEDIA_REGEX
         images_to_fix = find_all_tags(soup, 'img', src=regex)
@@ -106,17 +108,36 @@ class Migrator:
             if image_name is None:
                 LOG.warning("Unable to fix image {img}, can't find media id")
                 continue
-            image_name = image_name.split("?")[0]   
-            # TODO
-            #if bookstack_path := self.progress.media.get(image_name):
-            #    img['src'] = bookstack_path
-            #    continue
-            #if page_id:
-            #    img_file = download_file(self.dokuwiki._base_url + str(img['src']))
-            #    bookstack_image = self.bookstack.image_gallery_create(page_id, img_file, image_name.split(":")[-1])
-            #    self.progress.media[image_name] = bookstack_image.path
-            #    img['src'] = bookstack_image.path
+            image_name = image_name.split("?")[0]
+            if migrated_image_url := self.progress.media.get(image_name):
+                img['src'] = migrated_image_url
+                continue
+            if dokuwiki_page_id:
+                img_file = download_file(self.dokuwiki._base_url + str(img['src']))
+                migrated_image_path = self.upload_img(img_file, image_name)
+                self.progress.media[image_name] = migrated_image_path
+                img['src'] = migrated_image_path
         return str(soup)
+
+    def upload_img(self, file: IO, image_name: str) -> str:
+        *folder, image_name = image_name.split(":")
+        folder_path = "/".join(folder)
+        folder_id = self.mkdir_p(folder_path)
+        self.wikijs.upload_file(file, image_name, folder_id)
+        return "/" + folder_path + "/" + image_name
+
+    def mkdir_p(self, path: str) -> int:
+        path = path.strip("/")
+        if folder_id := self.progress.folders.get(path):
+            return folder_id
+        *parent, folder = path.split('/')
+        if folder == '':
+            return 0
+        parent_path = '/'.join(parent)
+        parent_folder_id = self.mkdir_p(parent_path)
+        new_folder = self.wikijs.create_folder(folder, parent_folder_id)
+        self.progress.folders[path] = new_folder.id
+        return new_folder.id
 
     def migrate(self) -> None:
         all_pages_and_revisions: list[PageAndRevision] = []

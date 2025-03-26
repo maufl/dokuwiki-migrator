@@ -29,7 +29,7 @@ class PagePath(NamedTuple):
 def map_page_id(page_id: str) -> PagePath | None:
     match page_id.split(":"):
         case [book_slug, chapter_slug, page_slug, *rest]:
-            return PagePath(book_slug, chapter_slug, "-".join(page_slug, *rest))
+            return PagePath(book_slug, chapter_slug, "-".join([page_slug, *rest]))
         case [book_slug, page_slug]:
             return PagePath(book_slug, None, page_slug)
         case [page_slug]:
@@ -78,13 +78,13 @@ class Migrator:
             # if we already migrated this page, assert that we try to create a newer revision
             if migrated_page.latest_revision >= page_revision:
                 return LOG.info(f"Skip migration of {page_id} {page_revision}, already migrated")
-            html = self.dokuwiki.get_page_html(page_id, page_revision)
+            html = self.dokuwiki.get_page_html(page_id, page_revision) or '<em>empty</em>'
             html = self.upload_and_patch_img_urls(html, migrated_page.page.id)
             html = self.patch_page_urls(html)
             self.bookstack.page_update(migrated_page.page.id, html=html)
             self.progress.pages[str(page_path)].latest_revision = page_revision
         else:
-            page_history_infos = self.dokuwiki.get_page_history(page_id)
+            page_history_infos = self.dokuwiki.get_page_history(page_id) or '<em>empty</em>'
             revisions = sorted(info.revision for info in page_history_infos)
             # if we only have one revision, then we must pass 0 as revision to dokuwiki, otherwise it returns an error
             html = self.dokuwiki.get_page_html(page_id, page_revision if len(revisions) > 0 else 0)

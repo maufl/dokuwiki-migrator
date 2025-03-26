@@ -117,6 +117,17 @@ def migrate_to_wikijs(config: TextIO, progress: TextIO | None = None) -> None:
             progress.seek(0)
             toml.dump(migration_progress.model_dump(), progress)
 
+@wikijs.command("reset")
+@click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
+def reset_wikijs(config: TextIO) -> None:
+    from migrator.wikijs import MigrationProgress, Migrator, Wikijs
+    cfg = Config(**toml.load(config))
+    assert cfg.wikijs, "Wikijs must be configured"
+    wikijs_client = Wikijs(cfg.wikijs)
+    pages = wikijs_client.list_pages()
+    for page in pages:
+        wikijs_client.delete_page(page.id)
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     cli()
