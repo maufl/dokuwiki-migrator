@@ -80,19 +80,21 @@ class Migrator:
                 return LOG.info(f"Skip migration of {page_id} {page_revision}, already migrated")
             html = self.dokuwiki.get_page_html(page_id, page_revision) or '<em>empty</em>'
             html = self.upload_and_patch_img_urls(html, migrated_page.page.id)
+            html = self.upload_and_patch_file_urls(html, migrated_page.page.id)
             html = self.patch_page_urls(html)
             self.bookstack.page_update(migrated_page.page.id, html=html)
             self.progress.pages[str(page_path)].latest_revision = page_revision
         else:
-            page_history_infos = self.dokuwiki.get_page_history(page_id) or '<em>empty</em>'
+            page_history_infos = self.dokuwiki.get_page_history(page_id)
             revisions = sorted(info.revision for info in page_history_infos)
             # if we only have one revision, then we must pass 0 as revision to dokuwiki, otherwise it returns an error
-            html = self.dokuwiki.get_page_html(page_id, page_revision if len(revisions) > 0 else 0)
+            html = self.dokuwiki.get_page_html(page_id, page_revision if len(revisions) > 0 else 0) or '<em>empty</em>'
             # update image URLs for images we already uploaded to bookstack
             html = self.upload_and_patch_img_urls(html)
             html = self.patch_page_urls(html)
             bookstack_page = self.bookstack.page_create(name=page_slug.title(), html=html, book_id=book.id, chapter_id=chapter.id if chapter else None)
             html = self.upload_and_patch_img_urls(html, bookstack_page.id)
+            html = self.upload_and_patch_file_urls(html, bookstack_page.id)
             self.bookstack.page_update(bookstack_page.id, html=html)
             migrated_page = MigratedPage(page=bookstack_page, latest_revision=page_revision)
             self.progress.pages[str(page_path)] = migrated_page
@@ -131,7 +133,7 @@ class Migrator:
         for img in images_to_fix:
             image_name = extract(img, 'src', regex)
             if image_name is None:
-                LOG.warning("Unable to fix image {img}, can't find media id")
+                LOG.warning(f"Unable to fix image {img}, can't find media id")
                 continue
             image_name = image_name.split("?")[0]   
             if bookstack_path := self.progress.media.get(image_name):
@@ -142,6 +144,29 @@ class Migrator:
                 bookstack_image = self.bookstack.image_gallery_create(page_id, img_file, image_name.split(":")[-1])
                 self.progress.media[image_name] = bookstack_image.path
                 img['src'] = bookstack_image.path
+        return str(soup)
+
+    def upload_and_patch_file_urls(self, html: str, page_id: int | None = None) -> str:
+        soup = BeautifulSoup(html, 'html.parser')
+        regex = MEDIA_REGEX_PRETTY if self.dokuwiki.pretty_urls else MEDIA_REGEX
+        links_to_fix = find_all_tags(soup, 'a', href=regex)
+        if len(links_to_fix) == 0:
+            return html
+        for a in links_to_fix:
+            media_name = extract(a, 'href', regex)
+            if media_name is None:
+                LOG.warning(f"Unable to fix link {a}, can't find media id")
+                continue
+            media_name = media_name.split("?")[0]   
+            if bookstack_path := self.progress.media.get(media_name):
+                a['href'] = bookstack_path
+                continue
+            if page_id:
+                media_file = download_file(self.dokuwiki._base_url + str(a['href']))
+                attachment = self.bookstack.attachment_create(page_id, media_file, media_name.split(":")[-1])
+                attachment_path = f"/attachments/{attachment.id}"
+                self.progress.media[media_name] = attachment_path
+                a['href'] = attachment_path
         return str(soup)
 
     def get_book_or_migrate(self, book_slug: str) -> Book:

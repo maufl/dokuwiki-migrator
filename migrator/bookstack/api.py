@@ -60,6 +60,11 @@ class Image(BaseModel):
     path: str
     url: str
 
+class Attachment(BaseModel):
+    id: int
+    name: str
+    external: bool
+
 def remove_none(json: Any) -> Any:
     if not isinstance(json, dict):
         return json
@@ -161,3 +166,6 @@ class Bookstack:
 
     def image_gallery_create(self, page_id: int, image: IO, name: str | None = None) -> Image:
         return Image(**self.post(f"/image-gallery", files={ "uploaded_to": (None, page_id), "type": (None, "gallery"), "image": (name, image), "name": (None, name) }))
+
+    def attachment_create(self, page_id: int, file: IO, name: str) -> Attachment:
+        return Attachment(**self.post("/attachments", files={ "uploaded_to": (None, page_id), "file": (name, file), "name": (None, name) }))
