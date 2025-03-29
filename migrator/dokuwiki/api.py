@@ -101,6 +101,14 @@ class WhoAmIResult(BaseModel):
     error: Error
     result: User | None = None
 
+class SavePageResult(BaseModel):
+    result: bool
+    error: Error
+
+class SaveMediaResult(BaseModel):
+    result: bool
+    error: Error
+
 class DokuWiki:
     _base_url: str
     _session: requests.Session
@@ -166,6 +174,23 @@ class DokuWiki:
     def get_page_html(self, id: str, revision: int = 0) -> str:
         result = GetPageResult(**self.call("/core.getPageHTML", { "page": id, "rev": revision }))
         LOG.debug(f"Result of getPageHTML for {id} {revision}: {result}")
+        return result.result
+
+    def save_page(self, page_id: str, text: str, summary: str = "", is_minor: bool = False) -> bool:
+        result = SavePageResult(**self.call("/core.savePage", {
+            "page": page_id,
+            "text": text,
+            "summary": summary,
+            "isminor": is_minor,
+        }))
+        return result.result
+
+    def save_media(self, media_id: str, media_content_base64: str, overwrite: bool = False) -> bool:
+        result = SaveMediaResult(**self.call("/core.saveMedia", {
+            "media": media_id,
+            "base64": media_content_base64,
+            "overwrite": overwrite
+        }))
         return result.result
 
     def acl_check(self, page_id: str, user: str = "", groups: list[str] = []) -> int:

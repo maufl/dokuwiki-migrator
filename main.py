@@ -27,6 +27,7 @@ LOG = logging.getLogger(__name__)
 
 class Config(BaseModel):
     dokuwiki: DokuWikiConfig
+    dokuwiki_target: DokuWikiConfig | None = None
     bookstack: BookstackConfig | None = None
     wikijs: WikijsConfig | None = None
     only_public: bool = True
@@ -127,6 +128,39 @@ def reset_wikijs(config: TextIO) -> None:
     pages = wikijs_client.list_pages()
     for page in pages:
         wikijs_client.delete_page(page.id)
+
+@cli.group()
+def dokuwiki() -> None:
+    ...
+
+@dokuwiki.command('migrate')
+@click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
+def migrate_to_doku_wiki(config: TextIO) -> None:
+    from migrator.dokuwiki import Migrator
+    cfg = Config(**toml.load(config))
+    source = DokuWiki(cfg.dokuwiki)
+    assert cfg.dokuwiki_target, "A DokuWiki target must be configured"
+    target = DokuWiki(cfg.dokuwiki_target)
+    migrator = Migrator(
+        source=source,
+        target=target,
+        only_ids=cfg.dokuwiki.only_ids,
+        only_public=cfg.only_public
+    )
+    migrator.migrate()
+
+@dokuwiki.command('reset')
+@click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
+def reset_doku_wiki(config: TextIO) -> None:
+    from migrator.dokuwiki import Migrator
+    cfg = Config(**toml.load(config))
+    assert cfg.dokuwiki_target, "A DokuWiki target must be configured"
+    target = DokuWiki(cfg.dokuwiki_target)
+    pages = target.list_pages()
+    for page in pages:
+        # Saving an empty page "deletes" it
+        # old revisions will be kept, so it's kinda pointless
+        target.save_page(page.id, "")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

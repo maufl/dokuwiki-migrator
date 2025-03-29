@@ -1,4 +1,4 @@
-from typing import TypeVar, Any, Protocol, IO, Callable
+from typing import TypeVar, Any, Protocol, IO, Callable, cast
 from urllib.parse import urljoin
 import json
 import logging
@@ -61,7 +61,7 @@ def log_exceptions(fn: C) -> C:
         except WikijsError as e:
             LOG.warning(f"Graphql API returned an error result: {e.error_code} {e.slug} {e.message}")
             raise
-    return _wraped
+    return cast(C, _wraped)
 
 class Wikijs:
     _base_url: str
