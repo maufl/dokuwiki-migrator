@@ -30,7 +30,7 @@ class Migrator:
         page_history_infos = self.source.get_page_history(page_id)
         revisions = sorted(info.revision for info in page_history_infos)
         # if we only have one revision, then we must pass 0 as revision to dokuwiki, otherwise it returns an error
-        text = self.source.get_page(page_id, page_revision if len(revisions) > 0 else 0)
+        text = self.source.get_page(page_id, page_revision if len(revisions) > 0 else 0) or "No content"
         self.target.save_page(page_id, text)
         # upload media contained in page
         html = self.source.get_page_html(page_id, page_revision if len(revisions) > 0 else 0)
@@ -79,4 +79,7 @@ class Migrator:
 
         all_pages_and_revisions.sort(key=lambda p: p.revision)
         for page_and_revision in all_pages_and_revisions:
-            self.migrate_page_revision(page_and_revision)
+            try:
+                self.migrate_page_revision(page_and_revision)
+            except Exception as e:
+                LOG.warning(f"Unable to migrate page {page_and_revision.page_id} revision {page_and_revision.revision}: {e}")
