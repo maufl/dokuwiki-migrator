@@ -135,15 +135,18 @@ def dokuwiki() -> None:
 
 @dokuwiki.command('migrate')
 @click.option('--config', '-c', required=True, help="The configuration file for the migration", type=click.File(mode='r',  encoding='utf-8'))
-def migrate_to_doku_wiki(config: TextIO) -> None:
-    from migrator.dokuwiki import Migrator
+@click.option('--progress', '-p', required=False, help="A file which tracks the progress of the migration. Usefull to update a migrated wiki from the original one.", type=click.File(mode='r+',  encoding='utf-8'))
+def migrate_to_doku_wiki(config: TextIO, progress: TextIO | None = None) -> None:
+    from migrator.dokuwiki import Migrator, MigrationProgress
     cfg = Config(**toml.load(config))
     source = DokuWiki(cfg.dokuwiki)
     assert cfg.dokuwiki_target, "A DokuWiki target must be configured"
     target = DokuWiki(cfg.dokuwiki_target)
+    migration_progress = MigrationProgress(**toml.load(progress)) if progress else MigrationProgress()
     migrator = Migrator(
         source=source,
         target=target,
+        progress=migration_progress,
         only_ids=cfg.dokuwiki.only_ids,
         only_public=cfg.only_public
     )

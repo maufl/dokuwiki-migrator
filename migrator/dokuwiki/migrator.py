@@ -10,22 +10,30 @@ from migrator.shared import MEDIA_REGEX, MEDIA_REGEX_PRETTY, extract, extract_me
 
 LOG = logging.getLogger(__name__)
 
+class MigrationProgress(BaseModel):
+    pages: dict[str, int] = {}
 
 class Migrator:
     source: DokuWiki
     target: DokuWiki
+    progress: MigrationProgress
     only_ids: list[str]
     only_public: bool
 
-    def __init__(self, source: DokuWiki, target: DokuWiki, only_ids: list[str] = [], only_public: bool = True) -> None:
+    def __init__(self, source: DokuWiki, target: DokuWiki, progress: MigrationProgress, only_ids: list[str] = [], only_public: bool = True) -> None:
         self.source = source
         self.target = target
+        self.progress = progress
         self.only_ids = only_ids
         self.only_public = only_public
 
     def migrate_page_revision(self, page: PageAndRevision) -> None:
         page_id = page.page_id
         page_revision = page.revision
+        migrated_revision = self.progress.pages.get(page_id)
+        if migrated_revision and migrated_revision >= page_revision:
+            LOG.info(f"Skiping page {page_id} revision {page_revision}, already migrated")
+            return
         LOG.info(f"Trying to migrate page {page_id} revision {page_revision}")
         page_history_infos = self.source.get_page_history(page_id)
         revisions = sorted(info.revision for info in page_history_infos)
@@ -35,6 +43,7 @@ class Migrator:
         # upload media contained in page
         html = self.source.get_page_html(page_id, page_revision if len(revisions) > 0 else 0)
         self.upload_media(html)
+        self.progress.pages[page_id] = page_revision
     
     def upload_media(self, html: str) -> str | None:
         soup = BeautifulSoup(html, 'html.parser')
