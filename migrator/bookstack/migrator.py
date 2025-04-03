@@ -11,7 +11,7 @@ import requests
 from migrator.dokuwiki import DokuWiki, PageInfo
 from .api import Bookstack, Book, Chapter, Page
 
-from migrator.shared import MEDIA_REGEX, MEDIA_REGEX_PRETTY, PAGE_REGEX, PAGE_REGEX_PRETTY, extract, find_all_tags, download_file, PageAndRevision
+from migrator.shared import MEDIA_REGEX, MEDIA_REGEX_PRETTY, PAGE_REGEX, PAGE_REGEX_PRETTY, extract, extract_media_id, find_all_tags, download_file, PageAndRevision
 
 LOG = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ class Migrator:
         if len(images_to_fix) == 0:
             return html
         for img in images_to_fix:
-            image_name = extract(img, 'src', regex)
+            image_name = extract_media_id(img, 'src', regex)
             if image_name is None:
                 LOG.warning(f"Unable to fix image {img}, can't find media id")
                 continue
@@ -153,7 +153,7 @@ class Migrator:
         if len(links_to_fix) == 0:
             return html
         for a in links_to_fix:
-            media_name = extract(a, 'href', regex)
+            media_name = extract_media_id(a, 'href', regex)
             if media_name is None:
                 LOG.warning(f"Unable to fix link {a}, can't find media id")
                 continue

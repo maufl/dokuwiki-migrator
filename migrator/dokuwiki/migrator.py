@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from bs4 import BeautifulSoup
 
 from .api import DokuWiki
-from migrator.shared import MEDIA_REGEX, MEDIA_REGEX_PRETTY, extract, find_all_tags, download_file, PageAndRevision
+from migrator.shared import MEDIA_REGEX, MEDIA_REGEX_PRETTY, extract, extract_media_id, find_all_tags, download_file, PageAndRevision
 
 LOG = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class Migrator:
         regex = MEDIA_REGEX_PRETTY if self.source.pretty_urls else MEDIA_REGEX
         images_to_fix = find_all_tags(soup, 'img', src=regex)
         for img in images_to_fix:
-            image_name = extract(img, 'src', regex)
+            image_name = extract_media_id(img, 'src', regex)
             if image_name is None:
                 LOG.warning("Unable to fix image {img}, can't find media id")
                 continue
