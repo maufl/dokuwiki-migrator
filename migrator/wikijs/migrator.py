@@ -57,7 +57,8 @@ class Migrator:
             if migrated_page.latest_revision >= page_revision:
                 return LOG.info(f"Skip migration of {page_id} {page_revision}, already migrated")
             html = self.dokuwiki.get_page_html(page_id, page_revision)
-            html = self.upload_and_patch_img_urls(html, page_id) or html
+            html = self.upload_and_patch_img_urls(html) or html
+            html = self.upload_and_patch_file_urls(html) or html
             html = self.patch_page_urls(html) or html
             self.wikijs.update_page(
                 id=migrated_page.page_id,
@@ -70,7 +71,8 @@ class Migrator:
             # if we only have one revision, then we must pass 0 as revision to dokuwiki, otherwise it returns an error
             html = self.dokuwiki.get_page_html(page_id, page_revision if len(revisions) > 0 else 0)
             # update image URLs for images we already uploaded to bookstack
-            html = self.upload_and_patch_img_urls(html, page_id) or html
+            html = self.upload_and_patch_img_urls(html) or html
+            html = self.upload_and_patch_file_urls(html) or html
             html = self.patch_page_urls(html) or html
             wikijs_page = self.wikijs.create_page(
                 path=page_id_to_path(page_id),
@@ -97,7 +99,7 @@ class Migrator:
             a['href'] = page_id_to_path(page_id)
         return str(soup)
     
-    def upload_and_patch_img_urls(self, html: str, dokuwiki_page_id: str) -> str | None:
+    def upload_and_patch_img_urls(self, html: str) -> str | None:
         soup = BeautifulSoup(html, 'html.parser')
         regex = MEDIA_REGEX_PRETTY if self.dokuwiki.pretty_urls else MEDIA_REGEX
         images_to_fix = find_all_tags(soup, 'img', src=regex)
@@ -112,19 +114,41 @@ class Migrator:
             if migrated_image_url := self.progress.media.get(image_name):
                 img['src'] = migrated_image_url
                 continue
-            if dokuwiki_page_id:
-                img_file = download_file(self.dokuwiki._base_url + str(img['src']))
-                migrated_image_path = self.upload_img(img_file, image_name)
-                self.progress.media[image_name] = migrated_image_path
-                img['src'] = migrated_image_path
+            img_file = download_file(self.dokuwiki._base_url + str(img['src']))
+            migrated_image_path = self.upload_file(img_file, image_name)
+            self.progress.media[image_name] = migrated_image_path
+            img['src'] = migrated_image_path
         return str(soup)
 
-    def upload_img(self, file: IO, image_name: str) -> str:
-        *folder, image_name = image_name.split(":")
+    def upload_and_patch_file_urls(self, html: str) -> str | None:
+        soup = BeautifulSoup(html, 'html.parser')
+        regex = MEDIA_REGEX_PRETTY if self.dokuwiki.pretty_urls else MEDIA_REGEX
+        links_to_fix = find_all_tags(soup, 'a', href=regex)
+        if len(links_to_fix) == 0:
+            return None
+        for a in links_to_fix:
+            media_name = extract(a, 'href', regex)
+            if media_name is None:
+                LOG.warning(f"Unable to fix link {a}, can't find media id")
+                continue
+            media_name = media_name.split("?")[0]   
+            if migrated_image_url := self.progress.media.get(media_name):
+                a['href'] = migrated_image_url
+                continue
+            media_file = download_file(self.dokuwiki._base_url + str(a['href']))
+            migrated_media_path = self.upload_file(media_file, media_name)
+            self.progress.media[media_name] = migrated_media_path
+            # Super supid hack, for some reason on import Wikijs will strip the leading slash from internal media links
+            # HOWEVER! It will only strip one, so I'm adding another one here, which makes the end result correct
+            a['href'] = "/" + migrated_media_path
+        return str(soup)
+
+    def upload_file(self, file: IO, file_name: str) -> str:
+        *folder, base_name = file_name.split(":")
         folder_path = "/".join(folder)
         folder_id = self.mkdir_p(folder_path)
-        self.wikijs.upload_file(file, image_name, folder_id)
-        return "/" + folder_path + "/" + image_name
+        self.wikijs.upload_file(file, base_name, folder_id)
+        return "/" + folder_path + "/" + base_name
 
     def mkdir_p(self, path: str) -> int:
         path = path.strip("/")

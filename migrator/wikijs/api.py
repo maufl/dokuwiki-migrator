@@ -122,7 +122,6 @@ class Wikijs:
         response = self._session.post(upload_url, files=files)
         if not response.ok:
             raise RuntimeError(f"Failed to upload {file_name}: {response.status_code} {response.text}")
-        LOG.info(response.text)
 
     @log_exceptions
     def list_pages(self) -> list[ListPagesPagesList]:
